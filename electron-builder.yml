@@ -1,0 +1,33 @@
+appId: com.djmid.billstracker
+productName: Bills Tracker
+directories:
+  buildResources: build
+  output: release
+files:
+  - out/**
+  - package.json
+  - '!**/*.{md,map}'
+  - '!src/**'
+# claude.exe (bundled with the Agent SDK) must live outside the asar to be spawnable.
+asarUnpack:
+  - node_modules/@anthropic-ai/claude-agent-sdk-win32-x64/**
+  - resources/**
+extraResources:
+  - from: resources
+    to: resources
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.png
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Bills Tracker
+  runAfterFinish: true
+npmRebuild: false
+# .github/workflows/release.yml uploads the installer; there is no auto-update feed.
+publish: null

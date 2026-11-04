@@ -1,0 +1,41 @@
+# Builds the Windows installer and publishes a GitHub release when a version tag is pushed.
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+
+      # First, so a mismatched tag or missing notes fails before the long build.
+      - name: Read release notes
+        run: node scripts/release-notes.mjs "$env:GITHUB_REF_NAME" "$env:RUNNER_TEMP/notes.md"
+
+      - run: npm ci
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run dist
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = $env:GITHUB_REF_NAME.TrimStart('v')
+          gh release create "$env:GITHUB_REF_NAME" "release/Bills Tracker Setup $version.exe" `
+            --title "Bills Tracker $version" `
+            --notes-file "$env:RUNNER_TEMP/notes.md" `
+            --verify-tag
