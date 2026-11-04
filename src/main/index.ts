@@ -6,6 +6,7 @@ import { resourcePath } from './paths.ts'
 import * as auth from './auth.ts'
 import { cancelScan, discoverGmail, AuthRequiredError } from './scanner.ts'
 import { clearBlocked, replan, scanState, startScheduler, trigger } from './scheduler.ts'
+import { checkForUpdate } from './updater.ts'
 import type { AppSnapshot, Bill, ScanRecord, Settings } from '../shared/types.ts'
 import { isNothingToPay, safePaymentUrl } from '../shared/bill.ts'
 
@@ -13,7 +14,7 @@ import { isNothingToPay, safePaymentUrl } from '../shared/bill.ts'
 if (!app.isPackaged && process.env.BILLS_DEV_USER_DATA) app.setPath('userData', process.env.BILLS_DEV_USER_DATA)
 
 const here = fileURLToPath(new URL('.', import.meta.url))
-const startHidden = process.argv.includes('--hidden')
+let startHidden = process.argv.includes('--hidden')
 
 let win: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -182,6 +183,20 @@ function notifyAfterScan(rec: ScanRecord) {
   }
 }
 
+function notifyIfUpdated() {
+  const version = app.getVersion()
+  const last = db.lastRunVersion()
+  db.setLastRunVersion(version)
+  if (!last || last === version || !Notification.isSupported()) return
+  const n = new Notification({
+    title: 'Bills Tracker updated',
+    body: `You're now on version ${version}.`,
+    icon: resourcePath('icon.png'),
+  })
+  n.on('click', showWindow)
+  n.show()
+}
+
 const ALLOWED_HOSTS = /(^|\.)(claude\.ai|claude\.com|anthropic\.com|google\.com)$/
 
 async function openExternal(url: string) {
@@ -276,14 +291,18 @@ function registerIpc() {
 }
 
 async function boot() {
+  // The installer relaunches with no arguments, so an update restart would otherwise pop the window open.
+  if (db.takeRestartHidden()) startHidden = true
   registerIpc()
   createWindow()
   createTray()
   applyLoginItem(db.settings())
+  notifyIfUpdated()
   startScheduler(broadcast, (rec) => {
     notifyAfterScan(rec)
     broadcast()
   })
+  checkForUpdate(() => db.setRestartHidden(!win?.isVisible()))
   // If the saved login was revoked while the app was closed, show the sign-in flow.
   const status = await auth.getAuthStatus()
   if (!status.loggedIn && db.onboarded()) {

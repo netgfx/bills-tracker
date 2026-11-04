@@ -28,6 +28,11 @@ nsis:
   createStartMenuShortcut: true
   shortcutName: Bills Tracker
   runAfterFinish: true
+  # No spaces: GitHub rewrites them in asset names, which would break the URLs in latest.yml.
+  artifactName: Bills-Tracker-Setup-${version}.${ext}
 npmRebuild: false
-# .github/workflows/release.yml uploads the installer; there is no auto-update feed.
-publish: null
+# The auto-update feed. .github/workflows/release.yml uploads the files; `npm run dist` never publishes.
+publish:
+  provider: github
+  owner: netgfx
+  repo: bills-tracker

@@ -11,7 +11,7 @@ npm install
 npm run dev        # run with hot reload
 npm test           # dedupe / RF checksum tests
 npm run typecheck
-npm run dist       # build release/Bills Tracker Setup <version>.exe
+npm run dist       # build release/Bills-Tracker-Setup-<version>.exe
 ```
 
 Dev only (the installed app ignores both):
@@ -27,6 +27,7 @@ When you change what the scanner extracts, bump `EXTRACTION_VERSION` in `src/mai
 - **Scans**: at the configured times (default 08:00 and 20:00), plus a catch-up after the PC wakes or the app starts if a slot was missed. Failed scans retry in 30 minutes, up to 3 times.
 - **Duplicates**: merged by Gmail message id, then vendor + RF / account + due date, with fuzzy matching for reminders (`src/main/dedupe.ts`). Removed bills are remembered so reminders don't bring them back.
 - **Data**: `%APPDATA%\Bills Tracker\bills.json`, written atomically.
+- **Updates**: when the app opens, it checks GitHub releases for a newer version, downloads it and restarts to install it, then shows a notification with the new version number. It waits for a running scan or sign-in to finish first. Turn this off with "Install updates automatically" in Settings.
 
 ## Releasing
 
@@ -34,7 +35,7 @@ When you change what the scanner extracts, bump `EXTRACTION_VERSION` in `src/mai
 2. Bump the version: `npm version <version> --no-git-tag-version`.
 3. Commit, then tag and push: `git tag v<version> && git push origin main v<version>`.
 
-Pushing the tag runs `.github/workflows/release.yml`, which tests, builds and publishes the installer with that version's changelog notes. It stops before building if the tag doesn't match `package.json` or the notes are missing.
+Pushing the tag runs `.github/workflows/release.yml`, which tests, builds and publishes the installer with that version's changelog notes. Installed apps then update themselves the next time they open. It stops before building if the tag doesn't match `package.json` or the notes are missing.
 
 Installers aren't code-signed, so Windows SmartScreen warns on first run.
 

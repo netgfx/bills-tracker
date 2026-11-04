@@ -49,6 +49,7 @@ export async function getAuthStatus(): Promise<AuthStatus> {
 const ANSI = /\x1b\][^\x07\x1b]*(\x07|\x1b\\)|\x1b\[[0-9;?]*[A-Za-z]/g
 
 let loginProc: ChildProcessWithoutNullStreams | null = null
+export const isLoggingIn = () => loginProc !== null
 
 /**
  * Drives `claude auth login`. The CLI opens the system browser on Anthropic's own

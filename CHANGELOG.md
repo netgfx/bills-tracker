@@ -4,6 +4,12 @@ All notable changes to Bills Tracker are recorded here. The format is based on [
 
 ## Unreleased
 
+## 1.4.0 - 2026-11-04
+
+### Added
+
+- Automatic updates: when the app opens, it installs any new version and shows a notification with the version number. Turn this off with "Install updates automatically" in Settings. Updating to this version still needs a manual install.
+
 ## 1.3.0 - 2026-11-04
 
 ### Fixed

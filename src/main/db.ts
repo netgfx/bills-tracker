@@ -13,11 +13,15 @@ interface DbShape {
   onboarded: boolean
   /** Extraction rules the seen-message list was built with; older lists can't be trusted to skip mail. */
   extractionVersion: number
+  /** App version on the previous launch; a difference means the app was updated. */
+  lastRunVersion: string | null
+  /** Set just before an update restart, so an app running in the tray stays there. */
+  restartHidden: boolean
 }
 
 const EMPTY: DbShape = {
   version: 1, bills: [], settings: DEFAULT_SETTINGS, scans: [], seenMessages: {}, dismissed: [], onboarded: false,
-  extractionVersion: 0,
+  extractionVersion: 0, lastRunVersion: null, restartHidden: false,
 }
 
 let state: DbShape | null = null
@@ -125,5 +129,21 @@ export const db = {
   setOnboarded(v: boolean) {
     load().onboarded = v
     persist()
+  },
+  lastRunVersion: () => load().lastRunVersion,
+  setLastRunVersion(v: string) {
+    load().lastRunVersion = v
+    persist()
+  },
+  setRestartHidden(v: boolean) {
+    load().restartHidden = v
+    persist()
+  },
+  takeRestartHidden() {
+    const s = load()
+    const hidden = s.restartHidden
+    s.restartHidden = false
+    persist()
+    return hidden
   },
 }

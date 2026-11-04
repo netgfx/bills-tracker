@@ -35,7 +35,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $version = $env:GITHUB_REF_NAME.TrimStart('v')
-          gh release create "$env:GITHUB_REF_NAME" "release/Bills Tracker Setup $version.exe" `
+          # latest.yml and the blockmap are what installed apps read to update themselves.
+          gh release create "$env:GITHUB_REF_NAME" `
+            "release/Bills-Tracker-Setup-$version.exe" `
+            "release/Bills-Tracker-Setup-$version.exe.blockmap" `
+            release/latest.yml `
             --title "Bills Tracker $version" `
             --notes-file "$env:RUNNER_TEMP/notes.md" `
             --verify-tag

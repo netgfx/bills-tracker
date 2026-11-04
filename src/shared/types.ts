@@ -56,6 +56,7 @@ export interface Settings {
   firstScanLookbackDays: number
   notifyDaysBefore: number
   autoMarkPaidFromReceipts: boolean
+  autoUpdate: boolean
   model: string
 }
 
@@ -65,6 +66,7 @@ export const DEFAULT_SETTINGS: Settings = {
   firstScanLookbackDays: 60,
   notifyDaysBefore: 3,
   autoMarkPaidFromReceipts: true,
+  autoUpdate: true,
   model: 'claude-opus-5-5',
 }
 

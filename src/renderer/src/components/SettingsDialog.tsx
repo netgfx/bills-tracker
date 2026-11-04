@@ -84,6 +84,10 @@ export function SettingsDialog() {
             <Switch id="login" checked={s.openAtLogin} onCheckedChange={(v) => void updateSettings({ openAtLogin: v })} />
           </Row>
 
+          <Row id="updates" title="Install updates automatically" text="Checks when the app opens, then restarts to install a new version.">
+            <Switch id="updates" checked={s.autoUpdate} onCheckedChange={(v) => void updateSettings({ autoUpdate: v })} />
+          </Row>
+
           <Row id="receipts" title="Mark bills paid from receipts" text="When a payment confirmation email matches a bill, move it to Paid.">
             <Switch
               id="receipts"
