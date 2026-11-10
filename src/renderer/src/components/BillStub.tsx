@@ -19,8 +19,8 @@ import {
   formatAmount,
   isNothingToPay,
   formatDate,
-  groupRf,
-  rfForClipboard,
+  codeForClipboard,
+  groupCode,
   urgencyOf,
   type Urgency,
 } from '@/lib/bills'
@@ -85,6 +85,30 @@ function DetailCopy({ label, value, copied, onCopy }: { label: string; value: st
   )
 }
 
+/** A code you type into e-banking: shown in groups of four, copied without spaces. */
+function StubCode({ label, code, copied, onCopy }: { label: string; code: string; copied: boolean; onCopy: () => void }) {
+  return (
+    <div>
+      <p className="mb-1 text-[12px] text-ink-muted">{label}</p>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            onClick={onCopy}
+            aria-label={`Copy ${label.toLowerCase()} ${code}`}
+            className="rf-code group/rf relative -ml-1.5 flex w-[calc(100%+0.75rem)] items-center gap-2 rounded-md px-1.5 py-1 text-left text-[15px] font-semibold transition-colors hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+          >
+            <span className="break-normal">{groupCode(code)}</span>
+            <Copy className="size-3.5 shrink-0 text-ink-muted opacity-0 transition-opacity group-hover/rf:opacity-100" />
+            {copied && <Stamp />}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>Click to copy without spaces</TooltipContent>
+      </Tooltip>
+    </div>
+  )
+}
+
 function hostOf(url: string): string {
   try {
     return new URL(url).hostname.replace(/^www\./, '')
@@ -105,6 +129,8 @@ export function BillStub({ bill }: { bill: Bill }) {
   const emailUrl = gmailEmailUrl(bill)
   // Older scans sometimes put the customer code in the account field too; show it once.
   const accountNumber = bill.accountNumber && bill.accountNumber !== bill.customerCode ? bill.accountNumber : null
+  // Two vendor codes and no RF code can leave a non-RF code in the RF slot; don't call it an RF code.
+  const rfLabel = bill.rfCode && looksLikeRf(bill.rfCode) ? 'RF code' : 'Payment code'
 
   async function togglePaid() {
     await setPaid(bill, !paid)
@@ -246,34 +272,38 @@ export function BillStub({ bill }: { bill: Bill }) {
 
       {/* The tear-off payment stub: what you need at the bank, nothing else. */}
       <div className="perforation flex flex-col justify-between gap-3 py-4 pl-5 pr-4">
-        <div>
-          <p className="mb-1 text-[12px] text-ink-muted">Payment code</p>
-          {bill.rfCode ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={() => void copy('rf', rfForClipboard(bill.rfCode!), 'Payment code')}
-                  className="rf-code group/rf relative -ml-1.5 flex w-[calc(100%+0.75rem)] items-center gap-2 rounded-md px-1.5 py-1 text-left text-[15px] font-semibold transition-colors hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
-                >
-                  <span className="break-normal">{groupRf(bill.rfCode)}</span>
-                  <Copy className="size-3.5 shrink-0 text-ink-muted opacity-0 transition-opacity group-hover/rf:opacity-100" />
-                  {copied === 'rf' && <Stamp />}
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>Click to copy without spaces</TooltipContent>
-            </Tooltip>
-          ) : null}
-          {bill.rfCode && looksLikeRf(bill.rfCode) && !isValidRf(bill.rfCode) && (
-            <p className="mt-1 flex items-start gap-1.5 text-[12px] leading-snug text-soon">
-              <AlertTriangle className="mt-px size-3.5 shrink-0" />
-              This code fails the RF check. Compare it with the email before paying.
-            </p>
+        <div className="flex flex-col gap-2">
+          {bill.rfCode && (
+            <div>
+              <StubCode
+                label={rfLabel}
+                code={bill.rfCode}
+                copied={copied === 'rf'}
+                onCopy={() => void copy('rf', codeForClipboard(bill.rfCode!), rfLabel)}
+              />
+              {looksLikeRf(bill.rfCode) && !isValidRf(bill.rfCode) && (
+                <p className="mt-1 flex items-start gap-1.5 text-[12px] leading-snug text-soon">
+                  <AlertTriangle className="mt-px size-3.5 shrink-0" />
+                  This code fails the RF check. Compare it with the email before paying.
+                </p>
+              )}
+            </div>
           )}
-          {!bill.rfCode && (
-            <p className="text-[13px] text-ink-muted">
-              {bill.isAutomaticPayment ? 'Not needed, charged automatically' : 'None in the email'}
-            </p>
+          {bill.paymentCode && (
+            <StubCode
+              label="Payment code"
+              code={bill.paymentCode}
+              copied={copied === 'paycode'}
+              onCopy={() => void copy('paycode', codeForClipboard(bill.paymentCode!), 'Payment code')}
+            />
+          )}
+          {!bill.rfCode && !bill.paymentCode && (
+            <div>
+              <p className="mb-1 text-[12px] text-ink-muted">Payment code</p>
+              <p className="text-[13px] text-ink-muted">
+                {bill.isAutomaticPayment ? 'Not needed, charged automatically' : 'None in the email'}
+              </p>
+            </div>
           )}
         </div>
 

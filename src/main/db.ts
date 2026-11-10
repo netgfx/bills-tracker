@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, renameSync, writeFileSync, copyFileSync } from 'node:fs'
 import { dataFile } from './paths.ts'
 import { DEFAULT_SETTINGS, type Bill, type ScanRecord, type Settings } from '../shared/types.ts'
+import { splitPaymentCodes } from '../shared/rf.ts'
 
 interface DbShape {
   version: 1
@@ -27,6 +28,16 @@ const EMPTY: DbShape = {
 let state: DbShape | null = null
 let writeTimer: NodeJS.Timeout | null = null
 
+/** Fills fields added after a bill was saved. */
+function upgradeBill(b: Bill): Bill {
+  return {
+    ...b,
+    ...splitPaymentCodes(b.rfCode, b.paymentCode),
+    customerCode: b.customerCode ?? null,
+    paymentUrl: b.paymentUrl ?? null,
+  }
+}
+
 function load(): DbShape {
   if (state) return state
   const file = dataFile()
@@ -37,7 +48,9 @@ function load(): DbShape {
       ...structuredClone(EMPTY),
       ...parsed,
       // Bills saved before these fields existed.
-      bills: (parsed.bills ?? []).map((b) => ({ ...b, customerCode: b.customerCode ?? null, paymentUrl: b.paymentUrl ?? null })),
+      // Older scans also kept vendor payment codes in rfCode; splitPaymentCodes moves them to paymentCode.
+      bills: (parsed.bills ?? []).map(upgradeBill),
+      dismissed: (parsed.dismissed ?? []).map(upgradeBill),
       settings: { ...DEFAULT_SETTINGS, ...parsed.settings },
     } as DbShape
   } catch (err) {

@@ -6,7 +6,7 @@ import type { Bill } from '../shared/types.ts'
 function bill(p: Partial<Bill>): Bill {
   const base = {
     id: 'x', vendor: 'ΔΕΗ', category: 'electricity', amount: 84.2, currency: 'EUR', dueDate: '2026-11-05',
-    issueDate: null, rfCode: 'RF18 0012 3456 7890', accountNumber: null, customerCode: null, paymentUrl: null, billingPeriod: null,
+    issueDate: null, rfCode: 'RF18 0012 3456 7890', paymentCode: null, accountNumber: null, customerCode: null, paymentUrl: null, billingPeriod: null,
     isAutomaticPayment: false, status: 'unpaid', paidAt: null, paidSource: null, emailSubject: '',
     emailDate: null, gmailMessageIds: ['m1'], gmailThreadId: null, notes: null, createdAt: '', updatedAt: '',
   } as Omit<Bill, 'fingerprint'>

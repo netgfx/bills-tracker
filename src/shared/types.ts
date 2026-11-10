@@ -12,7 +12,10 @@ export interface Bill {
   currency: string
   dueDate: string | null // YYYY-MM-DD
   issueDate: string | null
+  /** RF creditor reference (ISO 11649), e.g. "RF18 5390 …". */
   rfCode: string | null
+  /** The vendor's own payment code when the email gives one besides (or instead of) an RF code. */
+  paymentCode: string | null
   accountNumber: string | null
   customerCode: string | null
   /** The email's link for paying this bill online. Always https; opened only through `openPaymentLink`. */

@@ -11,6 +11,7 @@ import { claudeEnv, claudeExecutable, scanWorkDir } from './paths.ts'
 import { db } from './db.ts'
 import { archiveSupersededZeroBills, findDuplicate, fingerprint, matchReceipt, settleChargedAutoPayments } from './dedupe.ts'
 import { safePaymentUrl } from '../shared/bill.ts'
+import { splitPaymentCodes } from '../shared/rf.ts'
 import type { Bill, GmailStatus, ScanRecord, ScanTrigger } from '../shared/types.ts'
 
 /**
@@ -18,8 +19,9 @@ import type { Bill, GmailStatus, ScanRecord, ScanTrigger } from '../shared/types
  * 2: zero-total and credit statements are reported.
  * 3: failed automatic charges are manual bills; receipts carry their charge date.
  * 4: customer code and online payment link.
+ * 5: RF code and the vendor's own payment code are separate fields.
  */
-const EXTRACTION_VERSION = 4
+const EXTRACTION_VERSION = 5
 
 function localToday(): string {
   const d = new Date()
@@ -98,6 +100,7 @@ const ExtractedBill = z.object({
   dueDate: ymd.nullable(),
   issueDate: ymd.nullable(),
   rfCode: z.string().nullable(),
+  paymentCode: z.string().nullable(),
   accountNumber: z.string().nullable(),
   customerCode: z.string().nullable(),
   paymentUrl: z.string().nullable(),
@@ -138,7 +141,8 @@ Fields:
 - vendor: short brand name as people say it (e.g. "ΔΕΗ", "Cosmote", "Vodafone").
 - amount: the total due (Ποσό πληρωμής / Συνολικό ποσό / Σύνολο Λογαριασμού / Πληρωτέο), as a number with a dot decimal. Greek emails write 1.234,56 meaning 1234.56. Use 0 for a zero total and a negative number for a credit (πιστωτικό υπόλοιπο).
 - dueDate: Λήξη / Ημερομηνία λήξης / Εξόφληση έως / Πληρωμή έως, as YYYY-MM-DD. Greek dates are DD/MM/YYYY.
-- rfCode: the payment code exactly as printed, usually "RF" + digits (Κωδικός πληρωμής / Κωδικός RF / Ταυτότητα οφειλής). Copy every character; never guess or complete a partial code. Use null if absent.
+- rfCode: the RF payment reference exactly as printed: "RF" + 2 check digits + up to 21 letters/digits (Κωδικός RF / Κωδικός πληρωμής RF / Ταυτότητα οφειλής). Copy every character; never guess or complete a partial code. Only codes that start with "RF" go here. Null if absent.
+- paymentCode: the vendor's own payment code when it is not an RF code, exactly as printed (Κωδικός πληρωμής, Κωδικός ηλεκτρονικής πληρωμής, payment code), e.g. a long numeric code for paying at banks or ΕΛΤΑ. Many emails show both an RF code and a payment code: report both. Never put an RF code here. Null if absent.
 - accountNumber: contract / connection / account number if shown (Αρ. Παροχής, Αρ. Λογαριασμού, Αρ. Σύμβασης). If the email shows only a customer code, use it here too.
 - customerCode: the customer code exactly as printed (Κωδικός πελάτη, Αριθμός πελάτη, Customer ID / number). Null if absent.
 - paymentUrl: the link the email gives for paying this bill online (Πληρωμή online, Πληρώστε εδώ, Εξόφληση, Pay now, Pay bill), copied exactly, full https URL including any tracking redirect. If the email only says to pay by signing in to the vendor's site or app and links to it, use that link. Never use unsubscribe, offers, app-store, social, e-bill sign-up or general homepage links. If the plain text mentions a pay button but shows no URL, read that message again with get_thread messageFormat FULL_CONTENT and take the button's href. Null if there is none.
@@ -146,7 +150,7 @@ Fields:
 - notes: one short sentence when something matters for paying, e.g. "Amount and RF are only in the PDF attachment." Otherwise null.
 - messageId / threadId / viewUrl: from the Gmail tool results for the message the bill came from.
 
-Also report paymentConfirmations: emails confirming that a bill was paid (Επιβεβαίωση πληρωμής, Η πληρωμή σας ολοκληρώθηκε, payment received), with whatever vendor, RF, amount and date they show.
+Also report paymentConfirmations: emails confirming that a bill was paid (Επιβεβαίωση πληρωμής, Η πληρωμή σας ολοκληρώθηκε, payment received), with whatever vendor, RF or payment code, amount and date they show (put either code in rfCode).
 
 reviewedMessageIds: every message id you read, bill or not, so the app does not re-read it next time.
 
@@ -306,7 +310,7 @@ export function mergeResults(out: ScanOutput, autoPaid: boolean) {
   for (const x of out.bills) {
     const candidate = {
       vendor: x.vendor.trim(),
-      rfCode: x.rfCode ? x.rfCode.trim() : null,
+      ...splitPaymentCodes(x.rfCode, x.paymentCode),
       accountNumber: x.accountNumber,
       customerCode: x.customerCode?.trim() || null,
       paymentUrl: safePaymentUrl(x.paymentUrl),
@@ -323,11 +327,14 @@ export function mergeResults(out: ScanOutput, autoPaid: boolean) {
       if (dup.gmailMessageIds.includes(x.messageId)) {
         // The same email re-read after a rule change: only fill what the older rules didn't extract.
         const gaps = {
+          rfCode: dup.rfCode ?? candidate.rfCode,
+          paymentCode: dup.paymentCode ?? candidate.paymentCode,
           customerCode: dup.customerCode ?? candidate.customerCode,
           paymentUrl: dup.paymentUrl ?? candidate.paymentUrl,
         }
-        if (gaps.customerCode !== dup.customerCode || gaps.paymentUrl !== dup.paymentUrl) {
+        if ((Object.keys(gaps) as Array<keyof typeof gaps>).some((k) => gaps[k] !== dup[k])) {
           Object.assign(dup, gaps, { updatedAt: now } satisfies Partial<Bill>)
+          dup.fingerprint = fingerprint(dup)
           updated++
         }
         continue
@@ -339,6 +346,7 @@ export function mergeResults(out: ScanOutput, autoPaid: boolean) {
         amount: newer && candidate.amount != null ? candidate.amount : (dup.amount ?? candidate.amount),
         dueDate: dup.dueDate ?? candidate.dueDate,
         rfCode: dup.rfCode ?? candidate.rfCode,
+        paymentCode: dup.paymentCode ?? candidate.paymentCode,
         accountNumber: dup.accountNumber ?? candidate.accountNumber,
         customerCode: dup.customerCode ?? candidate.customerCode,
         // Payment links in reminders can replace expired ones from the first email.

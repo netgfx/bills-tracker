@@ -4,6 +4,10 @@ All notable changes to Bills Tracker are recorded here. The format is based on [
 
 ## Unreleased
 
+### Added
+
+- When a bill's email has both an RF code and the company's own payment code, the card now shows both. Click either one to copy it without spaces. The next check re-reads recent emails once to fill in the code that's missing on bills you already have.
+
 ## 1.4.0 - 2026-11-04
 
 ### Added

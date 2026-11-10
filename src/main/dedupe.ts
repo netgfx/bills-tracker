@@ -40,16 +40,27 @@ export function normalizeRf(rf: string | null | undefined): string | null {
   return compact.length >= 6 ? compact : null
 }
 
+type Codes = Pick<Bill, 'rfCode'> & Partial<Pick<Bill, 'paymentCode'>>
+
+/** The bill's RF and vendor payment codes, normalized. Either one identifies the bill. */
+function codesOf(b: Codes): string[] {
+  return [normalizeRf(b.rfCode), normalizeRf(b.paymentCode)].filter((c): c is string => c != null)
+}
+
+function sharesCode(a: Codes, codes: string[]): boolean {
+  return codesOf(a).some((c) => codes.includes(c))
+}
+
 function dayDiff(a: string, b: string): number {
   return Math.abs(Date.parse(a) - Date.parse(b)) / 86_400_000
 }
 
 export function fingerprint(
   b: Pick<Bill, 'vendor' | 'rfCode' | 'accountNumber' | 'dueDate' | 'billingPeriod' | 'issueDate' | 'amount'> &
-    Partial<Pick<Bill, 'emailDate'>>,
+    Partial<Pick<Bill, 'emailDate' | 'paymentCode'>>,
 ): string {
   const vk = vendorKey(b.vendor)
-  const ref = normalizeRf(b.rfCode) ?? (b.accountNumber ? b.accountNumber.replace(/\s/g, '') : '')
+  const ref = codesOf(b)[0] ?? (b.accountNumber ? b.accountNumber.replace(/\s/g, '') : '')
   // Without any bill date, the email's day keeps separate monthly charges of the same amount apart.
   const when = b.dueDate ?? b.billingPeriod ?? b.issueDate?.slice(0, 7) ?? b.emailDate?.slice(0, 10) ?? ''
   const amt = ref || when ? '' : String(b.amount ?? '')
@@ -57,7 +68,7 @@ export function fingerprint(
 }
 
 type Candidate = Pick<Bill, 'vendor' | 'rfCode' | 'accountNumber' | 'dueDate' | 'billingPeriod' | 'issueDate' | 'amount' | 'gmailMessageIds'> &
-  Partial<Pick<Bill, 'emailDate'>>
+  Partial<Pick<Bill, 'emailDate' | 'paymentCode'>>
 
 /**
  * Returns the stored bill that `c` is a re-send, reminder or correction of, if any.
@@ -73,13 +84,15 @@ export function findDuplicate(existing: Bill[], c: Candidate): Bill | undefined 
   if (byFp) return byFp
 
   const vk = vendorKey(c.vendor)
-  const rf = normalizeRf(c.rfCode)
+  const codes = codesOf(c)
+  const hasCode = codes.length > 0
   const sameVendor = existing.filter((b) => vendorKey(b.vendor) === vk)
 
-  if (rf) {
-    // Reminder emails for the same bill sometimes shift the due date by a day or two.
+  if (hasCode) {
+    // Reminder emails for the same bill sometimes shift the due date by a day or two,
+    // and may show only one of the bill's RF and payment codes.
     const m = sameVendor.find(
-      (b) => normalizeRf(b.rfCode) === rf && (!b.dueDate || !c.dueDate || dayDiff(b.dueDate, c.dueDate) <= 3),
+      (b) => sharesCode(b, codes) && (!b.dueDate || !c.dueDate || dayDiff(b.dueDate, c.dueDate) <= 3),
     )
     if (m) return m
   }
@@ -91,7 +104,7 @@ export function findDuplicate(existing: Bill[], c: Candidate): Bill | undefined 
         Math.abs(b.amount - c.amount!) < 0.005 &&
         b.dueDate != null &&
         dayDiff(b.dueDate, c.dueDate!) <= 1 &&
-        (!rf || !b.rfCode),
+        (!hasCode || codesOf(b).length === 0),
     )
     if (m) return m
   }
@@ -99,10 +112,10 @@ export function findDuplicate(existing: Bill[], c: Candidate): Bill | undefined 
   // Follow-up emails about one charge ("payment failed", then "update your card by …") often
   // give a due date in only one of them. Same amount within a week is the same bill;
   // monthly charges of the same amount are ~30 days apart, so they stay separate.
-  if (c.amount != null && c.emailDate && !rf) {
+  if (c.amount != null && c.emailDate && !hasCode) {
     const m = sameVendor.find(
       (b) =>
-        !b.rfCode &&
+        codesOf(b).length === 0 &&
         (!b.dueDate || !c.dueDate) &&
         b.amount != null &&
         Math.abs(b.amount - c.amount!) < 0.005 &&
@@ -133,6 +146,7 @@ export function settleChargedAutoPayments(bills: Bill[], today: string, now: str
 
 export interface PaymentReceipt {
   vendor: string
+  /** An RF or vendor payment code from the receipt, matched against both of the bill's codes. */
   rfCode: string | null
   amount: number | null
   paidDate: string | null
@@ -145,7 +159,7 @@ export function matchReceipt(bills: Bill[], r: PaymentReceipt): Bill | undefined
   const unpaid = bills.filter((b) => b.status === 'unpaid' && vendorKey(b.vendor) === vk && !isNothingToPay(b))
   const rf = normalizeRf(r.rfCode)
   if (rf) {
-    const byRf = unpaid.filter((b) => normalizeRf(b.rfCode) === rf)
+    const byRf = unpaid.filter((b) => sharesCode(b, [rf]))
     if (byRf.length === 1) return byRf[0]
     if (byRf.length > 1 && r.amount != null) {
       const narrowed = byRf.filter((b) => b.amount != null && Math.abs(b.amount - r.amount!) < 0.005)
@@ -166,12 +180,12 @@ export function matchReceipt(bills: Bill[], r: PaymentReceipt): Bill | undefined
 /** A newer statement for the same account replaces an older "nothing to pay" one, which moves to the archive. */
 export function archiveSupersededZeroBills(bills: Bill[], incoming: Bill, now: string) {
   const vk = vendorKey(incoming.vendor)
-  const rf = normalizeRf(incoming.rfCode)
+  const codes = codesOf(incoming)
   for (const old of bills) {
     if (old.status !== 'unpaid' || !isNothingToPay(old) || vendorKey(old.vendor) !== vk) continue
     const sameAccount =
       (old.accountNumber != null && old.accountNumber === incoming.accountNumber) ||
-      (rf != null && normalizeRf(old.rfCode) === rf)
+      sharesCode(old, codes)
     const older = (old.dueDate ?? old.issueDate ?? '') < (incoming.dueDate ?? incoming.issueDate ?? '')
     if (!sameAccount || !older) continue
     old.status = 'paid'

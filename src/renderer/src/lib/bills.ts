@@ -118,12 +118,12 @@ export function formatDate(iso: string | null, withYear = true): string {
   return withYear && !sameYear ? dateFmt.format(d) : shortFmt.format(d)
 }
 
-export function groupRf(rf: string): string {
-  return rf.replace(/\s/g, '').replace(/(.{4})(?=.)/g, '$1 ')
+export function groupCode(code: string): string {
+  return code.replace(/\s/g, '').replace(/(.{4})(?=.)/g, '$1 ')
 }
 
-export function rfForClipboard(rf: string): string {
-  return rf.replace(/\s/g, '')
+export function codeForClipboard(code: string): string {
+  return code.replace(/\s/g, '')
 }
 
 export interface Filters {
@@ -169,6 +169,8 @@ export function applyFilters(bills: Bill[], f: Filters): Bill[] {
         b.vendor,
         b.rfCode ?? '',
         b.rfCode?.replace(/\s/g, '') ?? '',
+        b.paymentCode ?? '',
+        b.paymentCode?.replace(/\s/g, '') ?? '',
         b.accountNumber ?? '',
         b.customerCode ?? '',
         b.emailSubject,
