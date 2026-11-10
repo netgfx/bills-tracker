@@ -28,3 +28,17 @@ When asked to release, follow these steps. Pushing a `vX.Y.Z` tag publishes publ
 ### Don't change
 
 Tags `v1.0.0` to `v1.2.0` point to the initial commit on purpose, because the source for those versions was never in git. Their releases are installer-only.
+
+## Agent skills
+
+### Issue tracker
+
+Issues are local markdown files under `.scratch/<feature>/` (gitignored, so they stay out of the public repo). See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Uses the five default triage roles as-is, recorded as `Status:` lines in each issue file. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
