@@ -1,7 +1,7 @@
 {
   "name": "bills-tracker",
   "productName": "Bills Tracker",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Scans Gmail twice a day for bills and tracks what needs paying.",
   "author": "djmid71",
   "license": "MIT",
