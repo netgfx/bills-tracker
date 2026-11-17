@@ -20,6 +20,7 @@ function fromYmd(s: string | null): Date | undefined {
 
 export function SearchBar() {
   const { filters, setFilters, clearFilters } = useApp()
+  const isMac = useApp((s) => s.snapshot?.platform === 'darwin')
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -67,7 +68,7 @@ export function SearchBar() {
           className="h-10 bg-slip pl-9 pr-20 text-[14px] [&::-webkit-search-cancel-button]:hidden"
         />
         <kbd className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded border border-rule bg-paper px-1.5 py-0.5 text-[11px] text-ink-muted">
-          Ctrl F
+          {isMac ? '⌘F' : 'Ctrl F'}
         </kbd>
       </div>
 

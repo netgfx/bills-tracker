@@ -64,7 +64,7 @@ export function Onboarding() {
         </ol>
         <p className="mt-auto flex items-start gap-2 text-[13px] leading-snug text-ink-muted">
           <ShieldCheck className="mt-0.5 size-4 shrink-0" />
-          Bills Tracker only reads email. It can’t send, delete or label anything, and your bills stay on this PC.
+          Bills Tracker only reads email. It can’t send, delete or label anything, and your bills and tickets stay on this computer.
         </p>
       </aside>
 
@@ -266,6 +266,7 @@ function ConnectGmail({ email, onDone }: { email: string | null; onDone: () => v
 
 function Ready() {
   const settings = useApp((s) => s.snapshot?.settings)
+  const isMac = useApp((s) => s.snapshot?.platform === 'darwin')
   const times = settings?.scanTimes.join(' and ') ?? '08:00 and 20:00'
   return (
     <div>
@@ -276,10 +277,18 @@ function Ready() {
           away when you open the app.
         </li>
         <li className="flex gap-3">
-          <Check className="mt-1 size-4 shrink-0 text-later" /> Bills Tracker starts with Windows and waits in the tray.
+          <Check className="mt-1 size-4 shrink-0 text-later" />{' '}
+          {isMac
+            ? 'Bills Tracker opens when you log in and waits in the menu bar.'
+            : 'Bills Tracker starts with Windows and waits in the tray.'}
         </li>
         <li className="flex gap-3">
-          <Check className="mt-1 size-4 shrink-0 text-later" /> Press Ctrl+F anywhere to search every bill, paid or not.
+          <Check className="mt-1 size-4 shrink-0 text-later" /> Press {isMac ? '⌘F' : 'Ctrl+F'} anywhere to search every bill,
+          paid or not.
+        </li>
+        <li className="flex gap-3">
+          <Check className="mt-1 size-4 shrink-0 text-later" /> Theater, cinema, concert and hotel confirmations show up under
+          Tickets & bookings, with their codes and links.
         </li>
       </ul>
       <Button size="lg" className="mt-9" onClick={() => void window.bills.completeOnboarding()}>

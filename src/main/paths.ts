@@ -1,7 +1,8 @@
 import { app } from 'electron'
-import { join } from 'node:path'
+import { join, sep } from 'node:path'
 import { createRequire } from 'node:module'
 import { mkdirSync } from 'node:fs'
+import { claudeBinarySpecifier, unpackedPath } from './platform.ts'
 
 const nodeRequire = createRequire(import.meta.url)
 
@@ -45,11 +46,9 @@ export function scanWorkDir(): string {
   return dir
 }
 
-/** Resolve the claude.exe the Agent SDK ships, accounting for asar unpacking. */
+/** Resolve the Claude CLI the Agent SDK ships for this OS and CPU, accounting for asar unpacking. */
 export function claudeExecutable(): string {
-  const pkg = process.arch === 'arm64' ? 'claude-agent-sdk-win32-arm64' : 'claude-agent-sdk-win32-x64'
-  const resolved = nodeRequire.resolve(`@anthropic-ai/${pkg}/claude.exe`)
-  return resolved.replace(`app.asar${process.platform === 'win32' ? '\\' : '/'}`, `app.asar.unpacked${process.platform === 'win32' ? '\\' : '/'}`)
+  return unpackedPath(nodeRequire.resolve(claudeBinarySpecifier(process.platform, process.arch)), sep)
 }
 
 export function resourcePath(name: string): string {

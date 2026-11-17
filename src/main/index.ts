@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, ipcMain, Menu, nativeImage, Notification, shell, Tray } from 'electron'
+import { app, BrowserWindow, clipboard, ipcMain, Menu, nativeImage, shell, Tray } from 'electron'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { db, flushNow } from './db.ts'
@@ -17,7 +17,9 @@ import { isNothingToPay, safeHttpsUrl, safePaymentUrl } from '../shared/bill.ts'
 if (!app.isPackaged && process.env.BILLS_DEV_USER_DATA) app.setPath('userData', process.env.BILLS_DEV_USER_DATA)
 
 const here = fileURLToPath(new URL('.', import.meta.url))
-let startHidden = process.argv.includes('--hidden')
+const isMac = process.platform === 'darwin'
+// Windows passes --hidden from the login item; macOS can't pass arguments, but says it opened the app at login.
+let startHidden = process.argv.includes('--hidden') || (isMac && app.isPackaged && app.getLoginItemSettings().wasOpenedAtLogin)
 
 let win: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -28,9 +30,21 @@ if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
   app.on('second-instance', () => showWindow())
-  app.setAppUserModelId('com.djmid.billstracker')
-  Menu.setApplicationMenu(null)
+  // macOS: opening the app again from Finder or the Dock while it runs.
+  app.on('activate', () => showWindow())
+  if (process.platform === 'win32') app.setAppUserModelId('com.djmid.billstracker')
+  // macOS needs a menu for ⌘C, ⌘V, ⌘A, ⌘Q and ⌘W to work, including in text fields.
+  Menu.setApplicationMenu(
+    isMac ? Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }, { role: 'windowMenu' }]) : null,
+  )
   app.whenReady().then(boot)
+}
+
+/** On macOS the app lives in the menu bar: it has a Dock icon only while its window is open. */
+function syncDock(visible: boolean) {
+  if (!isMac || !app.dock) return
+  if (visible) void app.dock.show()
+  else app.dock.hide()
 }
 
 function snapshot(): AppSnapshot {
@@ -53,7 +67,8 @@ function broadcast() {
 function applyLoginItem(settings: Settings) {
   // In dev this would register electron.exe itself, so only the installed app opts in.
   if (!app.isPackaged) return
-  app.setLoginItemSettings({ openAtLogin: settings.openAtLogin, args: ['--hidden'] })
+  if (isMac) app.setLoginItemSettings({ openAtLogin: settings.openAtLogin })
+  else app.setLoginItemSettings({ openAtLogin: settings.openAtLogin, args: ['--hidden'] })
 }
 
 function createWindow() {
@@ -78,7 +93,10 @@ function createWindow() {
 
   win.on('ready-to-show', () => {
     if (!startHidden || !db.onboarded()) win?.show()
+    else syncDock(false)
   })
+  win.on('show', () => syncDock(true))
+  win.on('hide', () => syncDock(false))
 
   win.on('close', (e) => {
     if (quitting) return
@@ -157,8 +175,12 @@ function updateTray() {
 }
 
 function createTray() {
-  const img = nativeImage.createFromPath(resourcePath('tray.png'))
+  // macOS menu bar icons are black-and-alpha "template" images that macOS tints for light and dark bars;
+  // the @2x file beside it is picked up automatically on Retina screens.
+  const img = nativeImage.createFromPath(resourcePath(isMac ? 'trayTemplate.png' : 'tray.png'))
+  if (isMac) img.setTemplateImage(true)
   tray = new Tray(img.isEmpty() ? nativeImage.createEmpty() : img)
+  // On macOS clicking the menu bar icon opens its menu, which starts with "Open Bills Tracker".
   tray.on('click', showWindow)
   updateTray()
 }

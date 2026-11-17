@@ -2,7 +2,7 @@
   "name": "bills-tracker",
   "productName": "Bills Tracker",
   "version": "1.5.0",
-  "description": "Scans Gmail twice a day for bills and tracks what needs paying.",
+  "description": "Scans Gmail twice a day for bills, tickets and bookings, and tracks what needs paying.",
   "author": "djmid71",
   "license": "MIT",
   "main": "./out/main/index.js",
@@ -13,7 +13,10 @@
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "node --test --experimental-strip-types src/main/*.test.ts",
-    "dist": "electron-vite build && electron-builder --win --x64 --publish never",
+    "dist": "electron-vite build && electron-builder --publish never",
+    "dist:win": "electron-vite build && electron-builder --win --x64 --publish never",
+    "dist:mac": "electron-vite build && electron-builder --mac --arm64 --publish never",
+    "icons": "node scripts/make-icons.mjs",
     "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {

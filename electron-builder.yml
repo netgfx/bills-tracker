@@ -8,13 +8,24 @@ files:
   - package.json
   - '!**/*.{md,map}'
   - '!src/**'
-# claude.exe (bundled with the Agent SDK) must live outside the asar to be spawnable.
+# The Claude CLI (bundled with the Agent SDK) must live outside the asar to be spawnable.
+# Only the package for the OS and CPU being built is installed, so listing both is safe.
 asarUnpack:
   - node_modules/@anthropic-ai/claude-agent-sdk-win32-x64/**
+  - node_modules/@anthropic-ai/claude-agent-sdk-darwin-arm64/**
   - resources/**
 extraResources:
   - from: resources
     to: resources
+# Locks down the Electron binary itself, so the signed app can't be used to run other code:
+# no ELECTRON_RUN_AS_NODE, NODE_OPTIONS or --inspect, and only the app's own, unmodified asar loads.
+electronFuses:
+  runAsNode: false
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
+  enableCookieEncryption: true
 win:
   target:
     - target: nsis
@@ -30,6 +41,25 @@ nsis:
   runAfterFinish: true
   # No spaces: GitHub rewrites them in asset names, which would break the URLs in latest.yml.
   artifactName: Bills-Tracker-Setup-${version}.${ext}
+# Apple Silicon only. Signed with a Developer ID and notarized when the release workflow has the Apple
+# secrets (see docs/code-signing.md); otherwise the workflow ad-hoc signs it (-c.mac.identity=-).
+mac:
+  target:
+    - target: dmg
+      arch: [arm64]
+    # The zip is what installed apps download to update themselves (latest-mac.yml points at it).
+    - target: zip
+      arch: [arm64]
+  category: public.app-category.finance
+  icon: build/icon.png
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  minimumSystemVersion: '12.0'
+  artifactName: Bills-Tracker-${version}-${arch}.${ext}
+dmg:
+  artifactName: Bills-Tracker-${version}-${arch}.${ext}
 npmRebuild: false
 # The auto-update feed. .github/workflows/release.yml uploads the files; `npm run dist` never publishes.
 publish:

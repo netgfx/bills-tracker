@@ -34,8 +34,9 @@ export function SettingsDialog() {
   }, [settingsOpen])
 
   if (!s) return null
+  const isMac = snapshot?.platform === 'darwin'
   const notificationHint =
-    snapshot?.platform === 'darwin'
+    isMac
       ? 'Nothing showing? Allow Bills Tracker in System Settings › Notifications.'
       : 'Nothing showing? Check Settings › System › Notifications and Do Not Disturb.'
 
@@ -54,7 +55,7 @@ export function SettingsDialog() {
         </DialogHeader>
 
         <div className="divide-y divide-rule">
-          <Row title="Check email at" text="Missed checks run when your PC wakes up or the app starts.">
+          <Row title="Check email at" text={`Missed checks run when your ${isMac ? 'Mac' : 'PC'} wakes up or the app starts.`}>
             <div className="flex flex-col items-end gap-2">
               {s.scanTimes.map((t, i) => (
                 <div key={i} className="flex items-center gap-1">
@@ -85,11 +86,23 @@ export function SettingsDialog() {
             </div>
           </Row>
 
-          <Row id="login" title="Start with Windows" text="Opens quietly in the tray when you sign in to Windows.">
+          <Row
+            id="login"
+            title={isMac ? 'Open at login' : 'Start with Windows'}
+            text={isMac ? 'Opens quietly in the menu bar when you log in to your Mac.' : 'Opens quietly in the tray when you sign in to Windows.'}
+          >
             <Switch id="login" checked={s.openAtLogin} onCheckedChange={(v) => void updateSettings({ openAtLogin: v })} />
           </Row>
 
-          <Row id="updates" title="Install updates automatically" text="Checks when the app opens, then restarts to install a new version.">
+          <Row
+            id="updates"
+            title="Install updates automatically"
+            text={
+              isMac
+                ? 'Checks when the app opens. Until the Mac app is signed by Apple, it tells you about new versions to download.'
+                : 'Checks when the app opens, then restarts to install a new version.'
+            }
+          >
             <Switch id="updates" checked={s.autoUpdate} onCheckedChange={(v) => void updateSettings({ autoUpdate: v })} />
           </Row>
 
@@ -101,7 +114,7 @@ export function SettingsDialog() {
             />
           </Row>
 
-          <Row id="notify" title="Remind me" text="Days before a due date to show a Windows notification.">
+          <Row id="notify" title="Remind me" text="Days before a due date to show a notification.">
             <Input
               id="notify"
               type="number"
