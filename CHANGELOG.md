@@ -4,6 +4,8 @@ All notable changes to Bills Tracker are recorded here. The format is based on [
 
 ## Unreleased
 
+## 1.6.0 - 2026-11-17
+
 ### Added
 
 - **macOS support** for Macs with Apple Silicon. The app lives in the menu bar, can open at login, and uses the usual shortcuts (⌘F to search, ⌘C and ⌘V in fields, ⌘Q to quit). Until the Mac app is signed by Apple, macOS asks you to allow it once in System Settings › Privacy & Security. Instead of installing updates itself, it tells you when a new version is out.
@@ -22,6 +24,7 @@ All notable changes to Bills Tracker are recorded here. The format is based on [
 - The first check after updating re-reads the lookback window once, to find tickets you already have. This uses more Claude usage than a normal check.
 - "Pay online" and "Open tickets" show the site a link really goes to, rather than the email's link-tracking service.
 - Notifications keep working when clicked a while after they appear.
+- The Windows installer is about half the size, after removing a second copy of Claude that the app didn't use.
 
 ### Security
 
