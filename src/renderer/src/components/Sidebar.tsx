@@ -1,11 +1,12 @@
-import { Archive, Flame, Inbox, Lightbulb, Loader2, Receipt, RefreshCw, Repeat, Settings, Smartphone, X } from 'lucide-react'
+import { Archive, Flame, History, Inbox, Lightbulb, Loader2, Receipt, RefreshCw, Repeat, Settings, Smartphone, Ticket as TicketIcon, X } from 'lucide-react'
 import type { Bill } from '@shared/types'
 import { Button } from '@/components/ui/button'
-import { GROUPS, formatDate, formatTotal, inGroup, payable, payableTotal, urgencyOf, type GroupId } from '@/lib/bills'
+import { GROUPS, formatDate, formatTotal, inGroup, payable, payableTotal, urgencyOf, type BillGroupId } from '@/lib/bills'
+import { TICKET_GROUPS, inTicketGroup, ticketWhen } from '@/lib/tickets'
 import { cn } from '@/lib/utils'
 import { useApp } from '@/store/useApp'
 
-const ICONS: Record<GroupId, typeof Inbox> = {
+const ICONS: Record<BillGroupId, typeof Inbox> = {
   due: Inbox,
   electricity: Lightbulb,
   phone: Smartphone,
@@ -34,6 +35,7 @@ function timeOf(iso: string) {
 export function Sidebar() {
   const { snapshot, group, setGroup, filters, setSettingsOpen, scanNow } = useApp()
   const bills = snapshot?.bills ?? []
+  const tickets = snapshot?.tickets ?? []
   const scan = snapshot?.scan
   const searching = Boolean(filters.query || filters.from || filters.to || filters.min != null || filters.max != null)
 
@@ -74,6 +76,35 @@ export function Sidebar() {
                 )}
               </button>
             </div>
+          )
+        })}
+      </nav>
+
+      <nav aria-label="Tickets and bookings" className="mt-4 flex flex-col gap-0.5 px-3">
+        <p className="px-2.5 pb-1 text-[12px] font-medium tracking-wide text-ink-muted">Tickets & bookings</p>
+        {TICKET_GROUPS.map((g) => {
+          const items = tickets.filter((t) => inTicketGroup(t, g.id))
+          const soon = g.id === 'tickets-upcoming' && items.some((t) => !t.cancelled && ticketWhen(t) === 'today')
+          const count = g.id === 'tickets-upcoming' ? items.filter((t) => !t.cancelled).length : 0
+          const Icon = g.id === 'tickets-upcoming' ? TicketIcon : History
+          const active = group === g.id && !searching
+          return (
+            <button
+              key={g.id}
+              type="button"
+              onClick={() => setGroup(g.id)}
+              title={g.hint}
+              aria-current={active ? 'page' : undefined}
+              className={cn(
+                'flex w-full items-center gap-3 rounded-md px-2.5 py-2 text-left text-[14px] transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none',
+                active ? 'bg-accent font-semibold text-ink' : 'text-ink-muted hover:bg-accent/60 hover:text-ink',
+              )}
+            >
+              <Icon className="size-4 shrink-0" />
+              <span className="flex-1 truncate">{g.label}</span>
+              {soon && <span className="size-2 rounded-full bg-soon" aria-label="something today or tomorrow" />}
+              {count > 0 && <span className="min-w-6 text-right text-[13px] tabular-nums">{count}</span>}
+            </button>
           )
         })}
       </nav>

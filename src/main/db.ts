@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, renameSync, writeFileSync, copyFileSync } from 'node:fs'
 import { dataFile } from './paths.ts'
-import { DEFAULT_SETTINGS, type Bill, type ScanRecord, type Settings } from '../shared/types.ts'
+import { DEFAULT_SETTINGS, type Bill, type ScanRecord, type Settings, type Ticket } from '../shared/types.ts'
 import { splitPaymentCodes } from '../shared/rf.ts'
 
 interface DbShape {
@@ -11,6 +11,9 @@ interface DbShape {
   /** Gmail message id -> ISO date first seen. Lets scans skip mail that held no bill. */
   seenMessages: Record<string, string>
   dismissed: Bill[]
+  tickets: Ticket[]
+  /** Removed tickets, kept so a re-sent confirmation doesn't bring them back. */
+  dismissedTickets: Ticket[]
   onboarded: boolean
   /** Extraction rules the seen-message list was built with; older lists can't be trusted to skip mail. */
   extractionVersion: number
@@ -21,7 +24,8 @@ interface DbShape {
 }
 
 const EMPTY: DbShape = {
-  version: 1, bills: [], settings: DEFAULT_SETTINGS, scans: [], seenMessages: {}, dismissed: [], onboarded: false,
+  version: 1, bills: [], settings: DEFAULT_SETTINGS, scans: [], seenMessages: {}, dismissed: [],
+  tickets: [], dismissedTickets: [], onboarded: false,
   extractionVersion: 0, lastRunVersion: null, restartHidden: false,
 }
 
@@ -113,6 +117,28 @@ export const db = {
     persist()
   },
   dismissed: () => load().dismissed,
+  tickets: () => load().tickets,
+  dismissedTickets: () => load().dismissedTickets,
+  setTickets(tickets: Ticket[]) {
+    load().tickets = tickets
+    persist()
+  },
+  upsertTicket(ticket: Ticket) {
+    const s = load()
+    const i = s.tickets.findIndex((t) => t.id === ticket.id)
+    if (i >= 0) s.tickets[i] = ticket
+    else s.tickets.push(ticket)
+    persist()
+  },
+  /** Like bills, removed tickets are kept aside (without their files) so a re-sent email is ignored. */
+  deleteTicket(id: string) {
+    const s = load()
+    const t = s.tickets.find((x) => x.id === id)
+    if (!t) return
+    s.tickets = s.tickets.filter((x) => x.id !== id)
+    s.dismissedTickets = [...s.dismissedTickets, { ...t, attachments: [], entries: [] }].slice(-300)
+    persist()
+  },
   updateSettings(patch: Partial<Settings>): Settings {
     const s = load()
     s.settings = { ...s.settings, ...patch }

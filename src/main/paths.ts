@@ -18,8 +18,24 @@ export function claudeConfigDir(): string {
   return dir
 }
 
+/**
+ * Dev only: `BILLS_DEV_SCAN_WINDOW=2026-08-19..2026-08-22` scans just those days, to test one
+ * email without paying for a whole lookback window.
+ */
+export function devScanWindow(): { after: Date; before: Date } | null {
+  const m = !app.isPackaged && /^(\d{4}-\d{2}-\d{2})\.\.(\d{4}-\d{2}-\d{2})$/.exec(process.env.BILLS_DEV_SCAN_WINDOW ?? '')
+  return m ? { after: new Date(`${m[1]}T00:00:00`), before: new Date(`${m[2]}T00:00:00`) } : null
+}
+
 export function dataFile(): string {
   return join(app.getPath('userData'), 'bills.json')
+}
+
+/** Ticket PDFs, images and saved barcodes, one folder per ticket id. */
+export function ticketsDir(): string {
+  const dir = join(app.getPath('userData'), 'tickets')
+  mkdirSync(dir, { recursive: true })
+  return dir
 }
 
 /** Working directory for SDK sessions; empty so there is nothing on disk to read. */

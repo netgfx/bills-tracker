@@ -16,8 +16,10 @@ import {
   sortByDue,
   sortByPaid,
   urgencyOf,
+  type BillGroupId,
   type Urgency,
 } from '@/lib/bills'
+import { isTicketGroup } from '@/lib/tickets'
 import { cn } from '@/lib/utils'
 import { useApp } from '@/store/useApp'
 
@@ -52,7 +54,9 @@ function headline(group: string, bills: Bill[]): string {
 }
 
 export function BillsView() {
-  const { snapshot, group, filters, leaving, clearFilters, scanNow } = useApp()
+  const { snapshot, group: selected, filters, leaving, clearFilters, scanNow } = useApp()
+  // Searching from the tickets area lands here, since search covers bills.
+  const group: BillGroupId = isTicketGroup(selected) ? 'due' : selected
   const all = snapshot?.bills ?? []
   const searching = hasFilters(filters)
   const meta = GROUPS.find((g) => g.id === group)!
@@ -138,7 +142,7 @@ export function BillsView() {
   )
 }
 
-function BlockedBanner() {
+export function BlockedBanner() {
   const blocked = useApp((s) => s.snapshot?.scan.blocked)
   if (!blocked) return null
   return (
@@ -162,7 +166,7 @@ function BlockedBanner() {
   )
 }
 
-function Empty({
+export function Empty({
   icon: Icon,
   title,
   text,

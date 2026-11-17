@@ -7,8 +7,11 @@ import * as auth from './auth.ts'
 import { cancelScan, discoverGmail, AuthRequiredError } from './scanner.ts'
 import { clearBlocked, replan, scanState, startScheduler, trigger } from './scheduler.ts'
 import { checkForUpdate } from './updater.ts'
-import type { AppSnapshot, Bill, ScanRecord, Settings } from '../shared/types.ts'
-import { isNothingToPay, safePaymentUrl } from '../shared/bill.ts'
+import { notify, setDefaultNotificationClick } from './notify.ts'
+import { startReminders } from './reminders.ts'
+import { imageDataUrl, removeTicketFiles, ticketFilePath } from './ticketFiles.ts'
+import type { AppSnapshot, Bill, ScanRecord, Settings, Ticket, TicketLink } from '../shared/types.ts'
+import { isNothingToPay, safeHttpsUrl, safePaymentUrl } from '../shared/bill.ts'
 
 // Dev only: keep test runs away from the installed app's data.
 if (!app.isPackaged && process.env.BILLS_DEV_USER_DATA) app.setPath('userData', process.env.BILLS_DEV_USER_DATA)
@@ -33,10 +36,12 @@ if (!app.requestSingleInstanceLock()) {
 function snapshot(): AppSnapshot {
   return {
     bills: db.bills(),
+    tickets: db.tickets(),
     settings: db.settings(),
     scan: scanState(),
     onboarded: db.onboarded(),
     appVersion: app.getVersion(),
+    platform: process.platform === 'darwin' || process.platform === 'win32' ? process.platform : 'linux',
   }
 }
 
@@ -79,13 +84,13 @@ function createWindow() {
     if (quitting) return
     e.preventDefault()
     win?.hide()
-    if (!toldAboutTray && Notification.isSupported()) {
-      toldAboutTray = true
-      new Notification({
-        title: 'Bills Tracker is still running',
-        body: 'It keeps checking your email in the background. Open it from the tray icon.',
-        icon: resourcePath('icon.png'),
-      }).show()
+    if (!toldAboutTray) {
+      toldAboutTray = notify(
+        'Bills Tracker is still running',
+        process.platform === 'darwin'
+          ? 'It keeps checking your email in the background. Open it from the menu bar icon.'
+          : 'It keeps checking your email in the background. Open it from the tray icon.',
+      )
     }
   })
 
@@ -159,27 +164,26 @@ function createTray() {
 }
 
 function notifyAfterScan(rec: ScanRecord) {
-  if (!Notification.isSupported()) return
-  const icon = resourcePath('icon.png')
-  if (rec.ok && rec.added > 0) {
-    const n = new Notification({
-      title: rec.added === 1 ? 'New bill found' : `${rec.added} new bills found`,
-      body: 'Open Bills Tracker to see amounts and payment codes.',
-      icon,
-    })
-    n.on('click', showWindow)
-    n.show()
+  if (!rec.ok) return
+  if (rec.added > 0) {
+    notify(
+      rec.added === 1 ? 'New bill found' : `${rec.added} new bills found`,
+      'Open Bills Tracker to see amounts and payment codes.',
+    )
+  }
+  if (rec.ticketsAdded) {
+    notify(
+      rec.ticketsAdded === 1 ? 'New ticket or booking found' : `${rec.ticketsAdded} new tickets and bookings found`,
+      'Open Bills Tracker to see the date, the codes and the links.',
+    )
   }
   const soon = dueSoon(db.bills(), db.settings().notifyDaysBefore)
-  if (rec.ok && soon.length && rec.trigger !== 'manual') {
+  if (soon.length && rec.trigger !== 'manual') {
     const total = soon.reduce((s, b) => s + (b.amount ?? 0), 0)
-    const n = new Notification({
-      title: soon.length === 1 ? `${soon[0].vendor} is due soon` : `${soon.length} bills due soon`,
-      body: `€${total.toFixed(2)} to pay in the next ${db.settings().notifyDaysBefore} days.`,
-      icon,
-    })
-    n.on('click', showWindow)
-    n.show()
+    notify(
+      soon.length === 1 ? `${soon[0].vendor} is due soon` : `${soon.length} bills due soon`,
+      `€${total.toFixed(2)} to pay in the next ${db.settings().notifyDaysBefore} days.`,
+    )
   }
 }
 
@@ -187,14 +191,26 @@ function notifyIfUpdated() {
   const version = app.getVersion()
   const last = db.lastRunVersion()
   db.setLastRunVersion(version)
-  if (!last || last === version || !Notification.isSupported()) return
-  const n = new Notification({
-    title: 'Bills Tracker updated',
-    body: `You're now on version ${version}.`,
-    icon: resourcePath('icon.png'),
-  })
-  n.on('click', showWindow)
-  n.show()
+  if (!last || last === version) return
+  notify('Bills Tracker updated', `You're now on version ${version}.`)
+}
+
+function findTicket(id: string): Ticket {
+  const t = db.tickets().find((x) => x.id === id)
+  if (!t) throw new Error('Ticket not found')
+  return t
+}
+
+const TICKET_LINKS: Record<TicketLink, (t: Ticket) => string | null> = {
+  tickets: (t) => t.ticketsUrl,
+  apple: (t) => t.appleWalletUrl,
+  google: (t) => t.googleWalletUrl,
+}
+
+/** Only PDFs and images open in the system viewer; wallet passes only on macOS, where Wallet handles them. */
+function canOpenAttachment(mimeType: string): boolean {
+  if (mimeType === 'application/vnd.apple.pkpass') return process.platform === 'darwin'
+  return mimeType === 'application/pdf' || mimeType.startsWith('image/')
 }
 
 const ALLOWED_HOSTS = /(^|\.)(claude\.ai|claude\.com|anthropic\.com|google\.com)$/
@@ -288,11 +304,38 @@ function registerIpc() {
     await shell.openExternal(url)
   })
   ipcMain.handle('copy-text', (_e, text: string) => clipboard.writeText(text))
+
+  // Tickets: like payment links, the renderer names a stored ticket and file, never a URL or path.
+  ipcMain.handle('ticket:delete', (_e, id: string) => {
+    db.deleteTicket(id)
+    removeTicketFiles(id)
+    broadcast()
+  })
+  ipcMain.handle('ticket:openLink', async (_e, id: string, link: TicketLink) => {
+    const pick = TICKET_LINKS[link]
+    const url = pick ? safeHttpsUrl(pick(findTicket(id))) : null
+    if (!url) throw new Error('This ticket has no such link.')
+    await shell.openExternal(url)
+  })
+  ipcMain.handle('ticket:openAttachment', async (_e, id: string, index: number) => {
+    const t = findTicket(id)
+    const a = t.attachments[index]
+    if (!a || !canOpenAttachment(a.mimeType)) throw new Error('This file can’t be opened.')
+    const error = await shell.openPath(ticketFilePath(t, a.file))
+    if (error) throw new Error(error)
+  })
+  ipcMain.handle('ticket:image', (_e, id: string, file: string) => imageDataUrl(findTicket(id), file))
+  ipcMain.handle('notify:test', () => {
+    if (!notify('Notifications are working', 'Bills Tracker will tell you about new bills, due dates and tomorrow’s tickets.')) {
+      throw new Error('Notifications aren’t supported on this system.')
+    }
+  })
 }
 
 async function boot() {
   // The installer relaunches with no arguments, so an update restart would otherwise pop the window open.
   if (db.takeRestartHidden()) startHidden = true
+  setDefaultNotificationClick(showWindow)
   registerIpc()
   createWindow()
   createTray()
@@ -302,6 +345,7 @@ async function boot() {
     notifyAfterScan(rec)
     broadcast()
   })
+  startReminders(broadcast)
   checkForUpdate(() => db.setRestartHidden(!win?.isVisible()))
   // If the saved login was revoked while the app was closed, show the sign-in flow.
   const status = await auth.getAuthStatus()

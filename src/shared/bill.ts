@@ -26,8 +26,8 @@ export function gmailEmailUrl(b: Pick<Bill, 'gmailMessageIds' | 'gmailViewUrl'>)
   return `https://mail.google.com/mail/u/0/#all/${id}`
 }
 
-/** Payment links come from email content, so only plain https links without embedded credentials are kept. */
-export function safePaymentUrl(raw: string | null | undefined): string | null {
+/** Links come from email content, so only plain https links without embedded credentials are kept. */
+export function safeHttpsUrl(raw: string | null | undefined): string | null {
   if (!raw) return null
   try {
     const u = new URL(raw.trim())
@@ -37,3 +37,5 @@ export function safePaymentUrl(raw: string | null | undefined): string | null {
     return null
   }
 }
+
+export const safePaymentUrl = safeHttpsUrl

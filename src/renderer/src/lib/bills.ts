@@ -1,11 +1,13 @@
 import type { Bill, BillCategory } from '@shared/types'
 import { isNothingToPay } from '@shared/bill'
+import type { TicketGroupId } from './tickets'
 
 export { isNothingToPay }
 
-export type GroupId = 'due' | BillCategory | 'auto' | 'paid'
+export type BillGroupId = 'due' | BillCategory | 'auto' | 'paid'
+export type GroupId = BillGroupId | TicketGroupId
 
-export const GROUPS: Array<{ id: GroupId; label: string; hint: string }> = [
+export const GROUPS: Array<{ id: BillGroupId; label: string; hint: string }> = [
   { id: 'due', label: 'To pay', hint: 'Every bill you still have to pay yourself' },
   { id: 'electricity', label: 'Electricity', hint: 'Power suppliers like ΔΕΗ' },
   { id: 'phone', label: 'Phone & internet', hint: 'Mobile, landline and broadband' },
@@ -15,7 +17,7 @@ export const GROUPS: Array<{ id: GroupId; label: string; hint: string }> = [
   { id: 'paid', label: 'Paid', hint: 'Bills you marked as paid' },
 ]
 
-export function inGroup(b: Bill, g: GroupId): boolean {
+export function inGroup(b: Bill, g: BillGroupId): boolean {
   if (g === 'paid') return b.status === 'paid'
   if (b.status === 'paid') return false
   if (g === 'auto') return b.isAutomaticPayment

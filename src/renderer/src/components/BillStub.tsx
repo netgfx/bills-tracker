@@ -24,6 +24,7 @@ import {
   urgencyOf,
   type Urgency,
 } from '@/lib/bills'
+import { hostOf } from '@/lib/tickets'
 import { cn } from '@/lib/utils'
 import { useApp } from '@/store/useApp'
 
@@ -107,14 +108,6 @@ function StubCode({ label, code, copied, onCopy }: { label: string; code: string
       </Tooltip>
     </div>
   )
-}
-
-function hostOf(url: string): string {
-  try {
-    return new URL(url).hostname.replace(/^www\./, '')
-  } catch {
-    return ''
-  }
 }
 
 export function BillStub({ bill }: { bill: Bill }) {

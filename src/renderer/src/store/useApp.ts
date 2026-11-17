@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { AppSnapshot, Bill, Settings } from '@shared/types'
+import type { AppSnapshot, Bill, Settings, Ticket } from '@shared/types'
 import { EMPTY_FILTERS, type Filters, type GroupId } from '@/lib/bills'
 
 interface AppState {
@@ -9,6 +9,11 @@ interface AppState {
   /** Ids mid tear-off animation; hidden from lists as soon as the animation ends. */
   leaving: Set<string>
   settingsOpen: boolean
+  /** The ticket on the print sheet while the print dialog is open. */
+  printing: Ticket | null
+
+  removeTicket(id: string): Promise<void>
+  printTicket(t: Ticket | null): void
 
   init(): () => void
   setGroup(g: GroupId): void
@@ -27,6 +32,12 @@ export const useApp = create<AppState>((set, get) => ({
   filters: EMPTY_FILTERS,
   leaving: new Set(),
   settingsOpen: false,
+  printing: null,
+
+  async removeTicket(id) {
+    await window.bills.deleteTicket(id)
+  },
+  printTicket: (printing) => set({ printing }),
 
   init() {
     void window.bills.getSnapshot().then((snapshot) => set({ snapshot }))

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { LogOut, Plus, X } from 'lucide-react'
+import { toast } from 'sonner'
+import { BellRing, LogOut, Plus, X } from 'lucide-react'
 import type { AuthStatus } from '@shared/types'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -33,6 +34,10 @@ export function SettingsDialog() {
   }, [settingsOpen])
 
   if (!s) return null
+  const notificationHint =
+    snapshot?.platform === 'darwin'
+      ? 'Nothing showing? Allow Bills Tracker in System Settings › Notifications.'
+      : 'Nothing showing? Check Settings › System › Notifications and Do Not Disturb.'
 
   const setTime = (i: number, v: string) => {
     const next = [...s.scanTimes]
@@ -106,6 +111,29 @@ export function SettingsDialog() {
               onChange={(e) => void updateSettings({ notifyDaysBefore: Math.max(0, Math.min(14, Number(e.target.value) || 0)) })}
               className="h-8 w-20"
             />
+          </Row>
+
+          <Row id="ticket-reminders" title="Remind me about tickets" text="A notification the day before a show, screening or hotel check-in.">
+            <Switch
+              id="ticket-reminders"
+              checked={s.ticketReminders}
+              onCheckedChange={(v) => void updateSettings({ ticketReminders: v })}
+            />
+          </Row>
+
+          <Row title="Test notifications" text={notificationHint}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                void window.bills
+                  .sendTestNotification()
+                  .then(() => toast('Test notification sent', { description: 'If nothing appeared, check your notification settings.' }))
+                  .catch((e: Error) => toast.error(e.message))
+              }
+            >
+              <BellRing /> Send one
+            </Button>
           </Row>
 
           <Row id="lookback" title="First check looks back" text="Days of email to read the first time.">
