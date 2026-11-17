@@ -4,6 +4,33 @@ All notable changes to Bills Tracker are recorded here. The format is based on [
 
 ## Unreleased
 
+### Added
+
+- **macOS support** for Macs with Apple Silicon. The app lives in the menu bar, can open at login, and uses the usual shortcuts (⌘F to search, ⌘C and ⌘V in fields, ⌘Q to quit). Until the Mac app is signed by Apple, macOS asks you to allow it once in System Settings › Privacy & Security. Instead of installing updates itself, it tells you when a new version is out.
+- **Tickets & bookings**: confirmation emails for theater, cinema, concerts and other events, and hotel stays, now show up in their own area with:
+  - the date and time, venue, seats and booking reference
+  - the ticket's QR codes or barcodes, drawn in the app from the codes in the email. Click one to show it large at the door.
+  - links to your tickets, to add them to Apple or Google Wallet, and to the email
+  - ticket PDFs and images attached to the email, ready to open and print, and a **Print** button that puts the codes on a plain page
+
+  Tickets move to Past once the show or stay is over.
+- A reminder notification the day before a show, screening or hotel check-in. Turn it off with "Remind me about tickets" in Settings.
+- A "Test notifications" button in Settings, to check notifications reach you.
+
+### Changed
+
+- The first check after updating re-reads the lookback window once, to find tickets you already have. This uses more Claude usage than a normal check.
+- "Pay online" and "Open tickets" show the site a link really goes to, rather than the email's link-tracking service.
+- Notifications keep working when clicked a while after they appear.
+
+### Security
+
+- The app now accepts messages only from its own window, and refuses every permission a web page can ask for.
+- The app binary can no longer be used to run other code: Electron's run-as-Node mode, `NODE_OPTIONS` and debugging flags are switched off, and only the app's own, unmodified files load.
+- The Gmail connector's settings now reach Claude over a private channel instead of the command line, where other users of the same computer could read them.
+- Ticket attachments are only kept when their content proves they're a PDF, an image or a wallet pass, and only open in your PDF or image viewer.
+- The release workflow can now sign the Windows installer and the macOS app. Signing switches on once the signing accounts are set up.
+
 ## 1.5.0 - 2026-11-10
 
 ### Added

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, ipcMain, Menu, nativeImage, shell, Tray } from 'electron'
+import { app, BrowserWindow, clipboard, ipcMain, Menu, nativeImage, session, shell, Tray, type IpcMainInvokeEvent } from 'electron'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { db, flushNow } from './db.ts'
@@ -243,10 +243,35 @@ async function openExternal(url: string) {
   await shell.openExternal(url)
 }
 
-function registerIpc() {
-  ipcMain.handle('snapshot', () => snapshot())
+/**
+ * Every IPC call must come from the app's own page in its main window. Navigation away is blocked
+ * and there are no iframes or webviews, so anything else is something that shouldn't be talking to us.
+ */
+function fromOurWindow(e: IpcMainInvokeEvent): boolean {
+  if (!win || e.sender !== win.webContents || e.senderFrame !== win.webContents.mainFrame) return false
+  let url: URL
+  try {
+    url = new URL(e.senderFrame.url)
+  } catch {
+    return false
+  }
+  if (!app.isPackaged && process.env.ELECTRON_RENDERER_URL) return url.origin === new URL(process.env.ELECTRON_RENDERER_URL).origin
+  return url.protocol === 'file:' && decodeURIComponent(url.pathname).replace(/\\/g, '/').endsWith('/renderer/index.html')
+}
 
-  ipcMain.handle('bill:setPaid', (_e, id: string, paid: boolean) => {
+function handle(channel: string, fn: (e: IpcMainInvokeEvent, ...args: any[]) => unknown) {
+  ipcMain.handle(channel, (e, ...args) => {
+    if (!fromOurWindow(e)) throw new Error('Blocked')
+    return fn(e, ...args)
+  })
+}
+
+const isId = (v: unknown): v is string => typeof v === 'string' && v.length > 0 && v.length < 100
+
+function registerIpc() {
+  handle('snapshot', () => snapshot())
+
+  handle('bill:setPaid', (_e, id: string, paid: boolean) => {
     const bill = db.bills().find((b) => b.id === id)
     if (!bill) throw new Error('Bill not found')
     bill.status = paid ? 'paid' : 'unpaid'
@@ -258,12 +283,12 @@ function registerIpc() {
     return bill
   })
 
-  ipcMain.handle('bill:delete', (_e, id: string) => {
+  handle('bill:delete', (_e, id: string) => {
     db.deleteBill(id)
     broadcast()
   })
 
-  ipcMain.handle('settings:update', (_e, patch: Partial<Settings>) => {
+  handle('settings:update', (_e, patch: Partial<Settings>) => {
     if (patch.scanTimes) {
       patch.scanTimes = patch.scanTimes.filter((t) => /^([01]\d|2[0-3]):[0-5]\d$/.test(t))
       if (!patch.scanTimes.length) delete patch.scanTimes
@@ -275,16 +300,16 @@ function registerIpc() {
     return s
   })
 
-  ipcMain.handle('scan:now', async () => {
+  handle('scan:now', async () => {
     clearBlocked()
     const p = trigger('manual')
     broadcast()
     return p
   })
-  ipcMain.handle('scan:cancel', () => cancelScan())
+  handle('scan:cancel', () => cancelScan())
 
-  ipcMain.handle('auth:status', () => auth.getAuthStatus())
-  ipcMain.handle('auth:login', (_e, opts: { sso: boolean; email?: string }) => {
+  handle('auth:status', () => auth.getAuthStatus())
+  handle('auth:login', (_e, opts: { sso: boolean; email?: string }) => {
     auth.startLogin(opts, (ev) => {
       win?.webContents.send('login-event', ev)
       if (ev.type === 'done') {
@@ -293,15 +318,15 @@ function registerIpc() {
       }
     })
   })
-  ipcMain.handle('auth:code', (_e, code: string) => auth.submitLoginCode(code))
-  ipcMain.handle('auth:cancel', () => auth.cancelLogin())
-  ipcMain.handle('auth:logout', async () => {
+  handle('auth:code', (_e, code: string) => auth.submitLoginCode(code))
+  handle('auth:cancel', () => auth.cancelLogin())
+  handle('auth:logout', async () => {
     await auth.logout()
     db.setOnboarded(false)
     broadcast()
   })
 
-  ipcMain.handle('gmail:status', async () => {
+  handle('gmail:status', async () => {
     try {
       return (await discoverGmail()).status
     } catch (e) {
@@ -310,7 +335,7 @@ function registerIpc() {
     }
   })
 
-  ipcMain.handle('onboarding:complete', () => {
+  handle('onboarding:complete', () => {
     db.setOnboarded(true)
     clearBlocked()
     broadcast()
@@ -318,36 +343,44 @@ function registerIpc() {
     void trigger('manual')
   })
 
-  ipcMain.handle('open-external', (_e, url: string) => openExternal(url))
+  handle('open-external', (_e, url: string) => openExternal(url))
   // Payment links point at any vendor's site, so the renderer can only ask for a stored bill's link, never pass a URL.
-  ipcMain.handle('bill:openPayment', async (_e, id: string) => {
+  handle('bill:openPayment', async (_e, id: string) => {
     const url = safePaymentUrl(db.bills().find((b) => b.id === id)?.paymentUrl)
     if (!url) throw new Error('This bill has no payment link.')
     await shell.openExternal(url)
   })
-  ipcMain.handle('copy-text', (_e, text: string) => clipboard.writeText(text))
+  handle('copy-text', (_e, text: unknown) => {
+    if (typeof text !== 'string' || text.length > 4096) throw new Error('Nothing to copy')
+    clipboard.writeText(text)
+  })
 
   // Tickets: like payment links, the renderer names a stored ticket and file, never a URL or path.
-  ipcMain.handle('ticket:delete', (_e, id: string) => {
+  handle('ticket:delete', (_e, id: unknown) => {
+    if (!isId(id)) throw new Error('Ticket not found')
     db.deleteTicket(id)
     removeTicketFiles(id)
     broadcast()
   })
-  ipcMain.handle('ticket:openLink', async (_e, id: string, link: TicketLink) => {
-    const pick = TICKET_LINKS[link]
-    const url = pick ? safeHttpsUrl(pick(findTicket(id))) : null
+  handle('ticket:openLink', async (_e, id: unknown, link: unknown) => {
+    if (!isId(id) || typeof link !== 'string' || !Object.hasOwn(TICKET_LINKS, link)) throw new Error('This ticket has no such link.')
+    const url = safeHttpsUrl(TICKET_LINKS[link as TicketLink](findTicket(id)))
     if (!url) throw new Error('This ticket has no such link.')
     await shell.openExternal(url)
   })
-  ipcMain.handle('ticket:openAttachment', async (_e, id: string, index: number) => {
+  handle('ticket:openAttachment', async (_e, id: unknown, index: unknown) => {
+    if (!isId(id) || !Number.isInteger(index)) throw new Error('This file can’t be opened.')
     const t = findTicket(id)
-    const a = t.attachments[index]
+    const a = t.attachments[index as number]
     if (!a || !canOpenAttachment(a.mimeType)) throw new Error('This file can’t be opened.')
     const error = await shell.openPath(ticketFilePath(t, a.file))
     if (error) throw new Error(error)
   })
-  ipcMain.handle('ticket:image', (_e, id: string, file: string) => imageDataUrl(findTicket(id), file))
-  ipcMain.handle('notify:test', () => {
+  handle('ticket:image', (_e, id: unknown, file: unknown) => {
+    if (!isId(id) || typeof file !== 'string') throw new Error('Unknown ticket file')
+    return imageDataUrl(findTicket(id), file)
+  })
+  handle('notify:test', () => {
     if (!notify('Notifications are working', 'Bills Tracker will tell you about new bills, due dates and tomorrow’s tickets.')) {
       throw new Error('Notifications aren’t supported on this system.')
     }
@@ -358,6 +391,9 @@ async function boot() {
   // The installer relaunches with no arguments, so an update restart would otherwise pop the window open.
   if (db.takeRestartHidden()) startHidden = true
   setDefaultNotificationClick(showWindow)
+  // The page needs no camera, microphone, location, notifications or anything else a website can ask for.
+  session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) => callback(false))
+  session.defaultSession.setPermissionCheckHandler(() => false)
   registerIpc()
   createWindow()
   createTray()

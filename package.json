@@ -12,7 +12,7 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "test": "node --test --experimental-strip-types src/main/*.test.ts",
+    "test": "node --test --experimental-strip-types src/main/*.test.ts scripts/*.test.mjs",
     "dist": "electron-vite build && electron-builder --publish never",
     "dist:win": "electron-vite build && electron-builder --win --x64 --publish never",
     "dist:mac": "electron-vite build && electron-builder --mac --arm64 --publish never",
